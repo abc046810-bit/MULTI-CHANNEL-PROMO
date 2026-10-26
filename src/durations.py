@@ -1,7 +1,10 @@
 """Duration parsing and deletion deadlines. The 45-hour cap is enforced here, in backend code."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 
 MIN_MINUTES = 1
 MAX_MINUTES = 45 * 60  # Hard cap, inside Telegram's 48-hour deletion window.
@@ -9,6 +12,9 @@ SAFETY_LIMIT = timedelta(minutes=MAX_MINUTES)
 
 # Preset options for the premium UI (label, minutes or None for manual)
 DURATION_PRESETS: list[tuple[str, int | None]] = [
+    ("1m", 1),
+    ("5m", 5),
+    ("15m", 15),
     ("30m", 30),
     ("1h", 60),
     ("2h", 120),
@@ -16,8 +22,6 @@ DURATION_PRESETS: list[tuple[str, int | None]] = [
     ("12h", 720),
     ("24h", 1440),
     ("36h", 2160),
-    ("40h", 2400),
-    ("44h", 2640),
     ("45h", 2700),
     ("Manual", None),
 ]
@@ -61,3 +65,14 @@ def format_duration(minutes: int | None) -> str:
     if h:
         return f"{h}h"
     return f"{m}m"
+
+
+def format_ist(dt: datetime | None) -> str:
+    """Show deadline in Indian Standard Time."""
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(IST)
+    return f"{local:%d %b %I:%M %p} IST"
+    
