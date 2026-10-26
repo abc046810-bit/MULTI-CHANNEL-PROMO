@@ -257,7 +257,16 @@ async def _post_init(app: Application) -> None:
 
 
 def build_application(settings: Settings, db: Database) -> Application:
-    app = Application.builder().token(settings.bot_token).post_init(_post_init).build()
+    app = (
+        Application.builder()
+        .token(settings.bot_token)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .post_init(_post_init)
+        .build()
+    )
     app.bot_data["settings"] = settings
     app.bot_data["db"] = db
     commands = {
