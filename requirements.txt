@@ -1,2 +1,0 @@
-python-telegram-bot[webhooks]==21.6
-pymongo==4.10.1
