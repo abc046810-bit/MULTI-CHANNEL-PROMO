@@ -13,6 +13,7 @@ from telegram.error import BadRequest, NetworkError, TelegramError
 from src.bot import build_application
 from src.config import load_settings
 from src.database import Database
+from src.scheduler import run_due_once
 
 
 async def _run(settings, db, log) -> None:
@@ -20,7 +21,6 @@ async def _run(settings, db, log) -> None:
     await application.initialize()
     await application.start()
 
-    # Register webhook with Telegram
     await application.bot.set_webhook(
         url=f"{settings.public_url}/telegram",
         secret_token=settings.webhook_secret,
@@ -29,7 +29,24 @@ async def _run(settings, db, log) -> None:
     )
     log.info("Webhook set to %s/telegram", settings.public_url)
 
+    async def _silent_notify(text: str) -> None:
+        try:
+            await application.bot.send_message(settings.owner_id, text)
+        except TelegramError:
+            pass
+
+    # Track last delete sweep so health pings do not hammer MongoDB
+    last_sweep = {"t": 0.0}
+
     async def health(_request: web.Request) -> web.Response:
+        # Every UptimeRobot ping also processes due deletes (Render free safe)
+        now = time.monotonic()
+        if now - last_sweep["t"] >= 10:
+            last_sweep["t"] = now
+            try:
+                await run_due_once(application.bot, db, _silent_notify)
+            except Exception as exc:
+                log.error("Health sweep failed: %s", type(exc).__name__)
         return web.Response(text="ok", content_type="text/plain")
 
     async def telegram_webhook(request: web.Request) -> web.Response:
@@ -43,6 +60,11 @@ async def _run(settings, db, log) -> None:
         update = Update.de_json(data, application.bot)
         if update:
             await application.process_update(update)
+        # Also sweep deletes after handling updates
+        try:
+            await run_due_once(application.bot, db, _silent_notify)
+        except Exception:
+            pass
         return web.Response(text="ok")
 
     app = web.Application()
@@ -54,9 +76,8 @@ async def _run(settings, db, log) -> None:
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", settings.port)
     await site.start()
-    log.info("Listening on 0.0.0.0:%s (GET / and /health, POST /telegram)", settings.port)
+    log.info("Listening on 0.0.0.0:%s (GET / /health, POST /telegram)", settings.port)
 
-    # Block forever
     await asyncio.Event().wait()
 
 
@@ -112,3 +133,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
