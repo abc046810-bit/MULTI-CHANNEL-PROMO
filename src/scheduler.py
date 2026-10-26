@@ -21,11 +21,12 @@ async def run_due_once(bot, db: Database, notify: Callable[[str], Awaitable[None
         close_if_done(db, rec["promotion_id"])
 
 
-async def run_scheduler(bot, db: Database, notify: Callable[[str], Awaitable[None]], interval: int = 60) -> None:
-    log.info("Deletion scheduler started (interval %ss)", interval)
+async def run_scheduler(bot, db: Database, notify: Callable[[str], Awaitable[None]], interval: int = 15) -> None:
+    log.info("Deletion scheduler started (interval %ss, IST deadlines)", interval)
     while True:
         try:
             await run_due_once(bot, db, notify)
         except Exception as exc:  # keep the loop alive; never log secrets
             log.error("Scheduler tick failed: %s", type(exc).__name__)
         await asyncio.sleep(interval)
+        
