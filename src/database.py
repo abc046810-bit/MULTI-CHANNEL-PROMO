@@ -1,5 +1,7 @@
 """MongoDB access. MongoDB is the source of truth for admins, channels, promotions and deletion schedules."""
-from pymongo import ASCENDING, MongoClient
+from __future__ import annotations
+
+from pymongo import ASCENDING, DESCENDING, MongoClient
 
 
 class Database:
@@ -19,5 +21,21 @@ class Database:
         self.admins.create_index([("user_id", ASCENDING)], unique=True)
         self.channels.create_index([("chat_id", ASCENDING)], unique=True)
         self.promotions.create_index([("promotion_id", ASCENDING)], unique=True)
+        self.promotions.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
         self.promotion_messages.create_index([("status", ASCENDING), ("delete_at", ASCENDING)])
         self.promotion_messages.create_index([("promotion_id", ASCENDING), ("status", ASCENDING)])
+        self.audit_logs.create_index([("at", DESCENDING)])
+
+    def stats(self) -> dict:
+        """Quick dashboard numbers."""
+        return {
+            "channels_total": self.channels.count_documents({}),
+            "channels_enabled": self.channels.count_documents({"enabled": True}),
+            "admins": self.admins.count_documents({}),
+            "promotions_active": self.promotions.count_documents({"status": "active"}),
+            "promotions_total": self.promotions.count_documents({}),
+            "messages_pending": self.promotion_messages.count_documents({"status": "pending"}),
+            "messages_deleted": self.promotion_messages.count_documents({"status": "deleted"}),
+            "messages_failed": self.promotion_messages.count_documents({"status": "failed"}),
+        }
+        
