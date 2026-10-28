@@ -11,7 +11,7 @@ from src.promotions import claim_messages, close_if_done, delete_one_message, re
 log = logging.getLogger(__name__)
 
 
-async def run_due_once(bot, db: Database, notify: Callable[[str], Awaitable[None]], batch: int = 25) -> None:
+async def run_due_once(bot, db: Database, notify: Callable[[str], Awaitable[None]], batch: int = 80) -> None:
     now = utcnow()
     for rec in claim_messages(db, {"delete_at": {"$lte": now}}, now, batch):
         status, error = await delete_one_message(bot, rec)
@@ -19,6 +19,12 @@ async def run_due_once(bot, db: Database, notify: Callable[[str], Awaitable[None
         if final == "failed":
             await notify(f"Could not delete {rec['promotion_id']} from chat {rec['chat_id']}: {error}")
         close_if_done(db, rec["promotion_id"])
+    # No history: drop any closed promos with zero pending messages
+    for p in db.promotions.find({"status": "closed"}, {"promotion_id": 1}):
+        pid = p["promotion_id"]
+        if db.promotion_messages.count_documents({"promotion_id": pid, "status": "pending"}) == 0:
+            db.promotion_messages.delete_many({"promotion_id": pid})
+            db.promotions.delete_one({"promotion_id": pid})
 
 
 async def run_scheduler(bot, db: Database, notify: Callable[[str], Awaitable[None]], interval: int = 15) -> None:
